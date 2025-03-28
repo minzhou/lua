@@ -1,93 +1,53 @@
-# makefile for building Lua
-# see INSTALL for installation instructions
-# see ../Makefile and luaconf.h for further customization
+# Makefile for building Lua
+# See ../doc/readme.html for installation and customization instructions.
 
 # == CHANGE THE SETTINGS BELOW TO SUIT YOUR ENVIRONMENT =======================
 
-# Warnings valid for both C and C++
-CWARNSCPP= \
-	-pedantic \
-	-Wextra \
-	-Wshadow \
-	-Wsign-compare \
-	-Wundef \
-	-Wwrite-strings \
-	-Wredundant-decls \
-	-Wdisabled-optimization \
-	-Waggregate-return \
-	-Wdouble-promotion \
-	#-Wno-aggressive-loop-optimizations   # not accepted by clang \
-	#-Wlogical-op   # not accepted by clang \
-	# the next warnings generate too much noise, so they are disabled
-	# -Wconversion  -Wno-sign-conversion \
-	# -Wsign-conversion \
-	# -Wconversion \
-	# -Wstrict-overflow=2 \
-	# -Wformat=2 \
-	# -Wcast-qual \
+# Your platform. See PLATS for possible values.
+PLAT= none
 
-# The next warnings are neither valid nor needed for C++
-CWARNSC= -Wdeclaration-after-statement \
-	-Wmissing-prototypes \
-	-Wnested-externs \
-	-Wstrict-prototypes \
-	-Wc++-compat \
-	-Wold-style-definition \
+CC= gcc -std=gnu99
+CFLAGS= -O2 -Wall -Wextra -DLUA_COMPAT_5_2 $(SYSCFLAGS) $(MYCFLAGS)
+LDFLAGS= $(SYSLDFLAGS) $(MYLDFLAGS)
+LIBS= -lm $(SYSLIBS) $(MYLIBS)
 
-
-CWARNS= $(CWARNSCPP)  $(CWARNSC)
-
-
-# -DEXTERNMEMCHECK -DHARDSTACKTESTS -DHARDMEMTESTS -DTRACEMEM='"tempmem"'
-# -g -DLUA_USER_H='"ltests.h"'
-# -pg -malign-double
-# -DLUA_USE_CTYPE -DLUA_USE_APICHECK
-# (in clang, '-ftrapv' for runtime checks of integer overflows)
-# -fsanitize=undefined -ftrapv
-TESTS= -DLUA_USER_H='"ltests.h"'
-
-# -mtune=native -fomit-frame-pointer
-# -fno-stack-protector
-LOCAL = $(TESTS) $(CWARNS) -g
-
-
-
-# enable Linux goodies
-MYCFLAGS= $(LOCAL) -std=c99 -DLUA_USE_LINUX -DLUA_COMPAT_5_2
-MYLDFLAGS= $(LOCAL) -Wl,-E
-MYLIBS= -ldl -lreadline
-
-
-CC= gcc
-CFLAGS= -Wall -O2 $(MYCFLAGS)
-AR= ar rc
+AR= ar rcu
 RANLIB= ranlib
 RM= rm -f
 
+SYSCFLAGS=
+SYSLDFLAGS=
+SYSLIBS=
 
+MYCFLAGS=
+MYLDFLAGS=
+MYLIBS=
+MYOBJS=
 
-# == END OF USER SETTINGS. NO NEED TO CHANGE ANYTHING BELOW THIS LINE =========
+# == END OF USER SETTINGS -- NO NEED TO CHANGE ANYTHING BELOW THIS LINE =======
 
+PLATS= aix bsd c89 freebsd generic linux macosx mingw posix solaris
 
-LIBS = -lm
-
-CORE_T=	liblua.a
+LUA_A=	liblua.a
 CORE_O=	lapi.o lcode.o lctype.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o \
 	lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o \
-	ltm.o lundump.o lvm.o lzio.o ltests.o
-AUX_O=	lauxlib.o
-LIB_O=	lbaselib.o ldblib.o liolib.o lmathlib.o loslib.o ltablib.o lstrlib.o \
-	lutf8lib.o lbitlib.o loadlib.o lcorolib.o linit.o
+	ltm.o lundump.o lvm.o lzio.o
+LIB_O=	lauxlib.o lbaselib.o lbitlib.o lcorolib.o ldblib.o liolib.o \
+	lmathlib.o loslib.o lstrlib.o ltablib.o lutf8lib.o loadlib.o linit.o
+BASE_O= $(CORE_O) $(LIB_O) $(MYOBJS)
 
 LUA_T=	lua
 LUA_O=	lua.o
 
-# LUAC_T=	luac
-# LUAC_O=	luac.o print.o
+LUAC_T=	luac
+LUAC_O=	luac.o
 
-ALL_T= $(CORE_T) $(LUA_T) $(LUAC_T)
-ALL_O= $(CORE_O) $(LUA_O) $(LUAC_O) $(AUX_O) $(LIB_O)
-ALL_A= $(CORE_T)
+ALL_O= $(BASE_O) $(LUA_O) $(LUAC_O)
+ALL_T= $(LUA_A) $(LUA_T) $(LUAC_T)
+ALL_A= $(LUA_A)
+
+# Targets start here.
+default: $(PLAT)
 
 all:	$(ALL_T)
 
@@ -95,38 +55,79 @@ o:	$(ALL_O)
 
 a:	$(ALL_A)
 
-$(CORE_T): $(CORE_O) $(AUX_O) $(LIB_O)
-	$(AR) $@ $?
+$(LUA_A): $(BASE_O)
+	$(AR) $@ $(BASE_O)
 	$(RANLIB) $@
 
-$(LUA_T): $(LUA_O) $(CORE_T)
-	$(CC) -o $@ $(MYLDFLAGS) $(LUA_O) $(CORE_T) $(LIBS) $(MYLIBS) $(DL)
+$(LUA_T): $(LUA_O) $(LUA_A)
+	$(CC) -o $@ $(LDFLAGS) $(LUA_O) $(LUA_A) $(LIBS)
 
-$(LUAC_T): $(LUAC_O) $(CORE_T)
-	$(CC) -o $@ $(MYLDFLAGS) $(LUAC_O) $(CORE_T) $(LIBS) $(MYLIBS)
+$(LUAC_T): $(LUAC_O) $(LUA_A)
+	$(CC) -o $@ $(LDFLAGS) $(LUAC_O) $(LUA_A) $(LIBS)
 
 clean:
-	rcsclean -u
 	$(RM) $(ALL_T) $(ALL_O)
 
 depend:
-	@$(CC) $(CFLAGS) -MM *.c
+	@$(CC) $(CFLAGS) -MM l*.c
 
 echo:
-	@echo "CC = $(CC)"
-	@echo "CFLAGS = $(CFLAGS)"
-	@echo "AR = $(AR)"
-	@echo "RANLIB = $(RANLIB)"
-	@echo "RM = $(RM)"
-	@echo "MYCFLAGS = $(MYCFLAGS)"
-	@echo "MYLDFLAGS = $(MYLDFLAGS)"
-	@echo "MYLIBS = $(MYLIBS)"
-	@echo "DL = $(DL)"
+	@echo "PLAT= $(PLAT)"
+	@echo "CC= $(CC)"
+	@echo "CFLAGS= $(CFLAGS)"
+	@echo "LDFLAGS= $(SYSLDFLAGS)"
+	@echo "LIBS= $(LIBS)"
+	@echo "AR= $(AR)"
+	@echo "RANLIB= $(RANLIB)"
+	@echo "RM= $(RM)"
 
-$(ALL_O): makefile
+# Convenience targets for popular platforms
+ALL= all
 
-# DO NOT EDIT
-# automatically made with 'gcc -MM l*.c'
+none:
+	@echo "Please do 'make PLATFORM' where PLATFORM is one of these:"
+	@echo "   $(PLATS)"
+
+aix:
+	$(MAKE) $(ALL) CC="xlc" CFLAGS="-O2 -DLUA_USE_POSIX -DLUA_USE_DLOPEN" SYSLIBS="-ldl" SYSLDFLAGS="-brtl -bexpall"
+
+bsd:
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_POSIX -DLUA_USE_DLOPEN" SYSLIBS="-Wl,-E"
+
+c89:
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_C89" CC="gcc -std=c89"
+	@echo ''
+	@echo '*** C89 does not guarantee 64-bit integers for Lua.'
+	@echo ''
+
+
+freebsd:
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_LINUX -I/usr/include/edit" SYSLIBS="-Wl,-E -ledit" CC="cc"
+
+generic: $(ALL)
+
+linux:
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_LINUX" SYSLIBS="-Wl,-E -ldl -lreadline"
+
+macosx:
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_MACOSX" SYSLIBS="-lreadline"
+
+mingw:
+	$(MAKE) "LUA_A=lua53.dll" "LUA_T=lua.exe" \
+	"AR=$(CC) -shared -o" "RANLIB=strip --strip-unneeded" \
+	"SYSCFLAGS=-DLUA_BUILD_AS_DLL" "SYSLIBS=" "SYSLDFLAGS=-s" lua.exe
+	$(MAKE) "LUAC_T=luac.exe" luac.exe
+
+posix:
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_POSIX"
+
+solaris:
+	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_POSIX -DLUA_USE_DLOPEN -D_REENTRANT" SYSLIBS="-ldl"
+
+# list targets that do not create files (but not all makes understand .PHONY)
+.PHONY: all $(PLATS) default o a clean depend echo none
+
+# DO NOT DELETE
 
 lapi.o: lapi.c lprefix.h lua.h luaconf.h lapi.h llimits.h lstate.h \
  lobject.h ltm.h lzio.h lmem.h ldebug.h ldo.h lfunc.h lgc.h lstring.h \
@@ -178,13 +179,11 @@ lstrlib.o: lstrlib.c lprefix.h lua.h luaconf.h lauxlib.h lualib.h
 ltable.o: ltable.c lprefix.h lua.h luaconf.h ldebug.h lstate.h lobject.h \
  llimits.h ltm.h lzio.h lmem.h ldo.h lgc.h lstring.h ltable.h lvm.h
 ltablib.o: ltablib.c lprefix.h lua.h luaconf.h lauxlib.h lualib.h
-ltests.o: ltests.c lprefix.h lua.h luaconf.h lapi.h llimits.h lstate.h \
- lobject.h ltm.h lzio.h lmem.h lauxlib.h lcode.h llex.h lopcodes.h \
- lparser.h lctype.h ldebug.h ldo.h lfunc.h lstring.h lgc.h ltable.h \
- lualib.h
 ltm.o: ltm.c lprefix.h lua.h luaconf.h ldebug.h lstate.h lobject.h \
  llimits.h ltm.h lzio.h lmem.h ldo.h lstring.h lgc.h ltable.h lvm.h
 lua.o: lua.c lprefix.h lua.h luaconf.h lauxlib.h lualib.h
+luac.o: luac.c lprefix.h lua.h luaconf.h lauxlib.h lobject.h llimits.h \
+ lstate.h ltm.h lzio.h lmem.h lundump.h ldebug.h lopcodes.h
 lundump.o: lundump.c lprefix.h lua.h luaconf.h ldebug.h lstate.h \
  lobject.h llimits.h ltm.h lzio.h lmem.h ldo.h lfunc.h lstring.h lgc.h \
  lundump.h
